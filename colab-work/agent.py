@@ -7,36 +7,54 @@ Original file is located at
     https://colab.research.google.com/drive/1f2_f25ZW_dPsHu_-8m9vyOagAHlc0Cal
 """
 
-!pip install -q transformers accelerate sentencepiece
+# =============================================================================
+# AI Agent Template（工具呼叫版）
+# Model: TinyLlama (可替換成其他 HuggingFace 模型)
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Cell 1：安裝套件（只需執行一次）
+# -----------------------------------------------------------------------------
+
+import os
+os.system("pip install -q transformers accelerate sentencepiece")
+
+# -----------------------------------------------------------------------------
+# Cell 2：載入模型與定義函式（只需執行一次，之後重複測試不用重跑）
+# -----------------------------------------------------------------------------
 
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
+import re
 
-model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+# ⚙️ 設定區（修改這裡來切換模型或行為）
+MODEL_NAME     = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"  # 替換成任何 HuggingFace Chat 模型
+MAX_NEW_TOKENS = 200
+DO_SAMPLE      = False  # True = 隨機生成（創意）；False = 確定性生成（精準）
 
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+def load_model(model_name: str = MODEL_NAME):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+        device_map="auto"
+    )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    return tokenizer, model
 
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype=torch.float16,
-    device_map="auto"
-)
-
-if tokenizer.pad_token is None:
-    tokenizer.pad_token = tokenizer.eos_token
-
-def llm(messages):  # 改成接收 messages
+def llm(messages: list) -> str:
     prompt = tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
-
     inputs = tokenizer(prompt, return_tensors="pt")
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
     output = model.generate(
         **inputs,
-        max_new_tokens=200,
-        do_sample=False,
+        max_new_tokens=MAX_NEW_TOKENS,
+        do_sample=DO_SAMPLE,
         pad_token_id=tokenizer.pad_token_id,
         eos_token_id=tokenizer.eos_token_id
     )
@@ -44,48 +62,94 @@ def llm(messages):  # 改成接收 messages
     new_tokens = output[0][inputs["input_ids"].shape[1]:]
     return tokenizer.decode(new_tokens, skip_special_tokens=True)
 
-def calculator(expression):
+tokenizer, model = load_model()
+print("✅ 模型載入完成")
+
+# -----------------------------------------------------------------------------
+# Cell 3：工具定義 + 註冊（新增工具只需加函式並註冊進 TOOLS）
+# -----------------------------------------------------------------------------
+
+def calculator(expression: str) -> str:
+    """計算數學算式"""
+    if not re.fullmatch(r"[\d\s\+\-\*\/\.\(\)]+", expression):
+        return "計算錯誤：不合法的算式"
     try:
         return str(eval(expression))
-    except:
+    except Exception:
         return "計算錯誤"
 
-system_prompt = """你是一個 AI Agent，你有以下工具可以使用：
+# ✏️ 在這裡新增更多工具函式，例如：
+# def web_search(query: str) -> str:
+#     ...
 
-CALCULATOR: 用來計算數學，格式是 CALCULATOR(算式)
+# ✏️ 新增工具後，把它註冊進來就好，agent 會自動支援
+TOOLS = {
+    "CALCULATOR": calculator,
+    # "WEB_SEARCH": web_search,
+}
 
-如果需要計算，就輸出：CALCULATOR(算式)
-如果不需要工具，直接回答。
+def build_tool_prompt(tools: dict) -> str:
+    """根據 TOOLS 自動產生 system prompt 的工具說明"""
+    tool_lines = "\n".join(f"- {name}(參數)" for name in tools)
+    return f"""你是一個 AI Agent，必須嚴格遵守以下規則：
 
-範例：
+規則：
+1. 遇到數學計算，你【絕對不能】自己計算，必須呼叫工具。
+2. 呼叫工具時，只能輸出一行：工具名稱(參數)，不能有其他文字。
+3. 不需要工具時，才直接回答。
+
+可用工具：
+{tool_lines}
+
+範例（數學問題）：
 User: 25 * 4 是多少？
 Assistant: CALCULATOR(25 * 4)
-"""
 
-import re
+範例（非數學問題）：
+User: 你好嗎？
+Assistant: 我很好，謝謝！"""
 
-def agent(user_question):
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_question}
-    ]
+def parse_tool_call(response: str, tools: dict):
+    """從模型回覆中自動比對所有已註冊工具，回傳 (tool_name, args) 或 (None, None)"""
+    for line in response.splitlines():
+        line = line.strip()
+        for name in tools:
+            if line.startswith(f"{name}("):
+                match = re.search(rf"{name}\((.+)\)", line)
+                if match:
+                    return name, match.group(1)
+    return None, None
+
+def agent(messages: list) -> str:
+    messages = messages.copy()
 
     response = llm(messages)
-    print(f"模型說：{response}")
+    clean_response = response.splitlines()[0].strip()
+    print(f"[模型] {clean_response}")
 
-    if "CALCULATOR(" in response:
-        expr = re.search(r"CALCULATOR\((.+)\)", response).group(1)
-        print(f"呼叫計算機：{expr}")
+    tool_name, tool_args = parse_tool_call(response, TOOLS)
 
-        result = calculator(expr)
-        print(f"計算結果：{result}")
+    if tool_name:
+        print(f"[工具呼叫] {tool_name}({tool_args})")
+        tool_result = TOOLS[tool_name](tool_args)
+        print(f"[工具結果] {tool_result}")
 
-        messages.append({"role": "assistant", "content": response})
-        messages.append({"role": "user", "content": f"計算結果是 {result}，請給出最終回答"})
-
-        final = llm(messages)
-        return final
+        return f"{tool_args} = {tool_result}"
 
     return response
 
-print(agent("15 * 12 是多少？"))
+# -----------------------------------------------------------------------------
+# Cell 4：執行（修改 USER_PROMPT 後重複跑這格）
+# -----------------------------------------------------------------------------
+
+# ✏️ 修改這裡
+USER_PROMPT = "15 * 12 是多少？"
+
+SYSTEM_PROMPT = "你是一個 AI Agent。\n\n" + build_tool_prompt(TOOLS)
+MESSAGES = [
+    {"role": "system", "content": SYSTEM_PROMPT},
+    {"role": "user",   "content": USER_PROMPT}
+]
+
+print(f"問題：{USER_PROMPT}")
+print(f"回答：{agent(MESSAGES)}")

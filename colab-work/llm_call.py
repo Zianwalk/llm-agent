@@ -7,49 +7,85 @@ Original file is located at
     https://colab.research.google.com/drive/1N-IAKS5ReXMuQwOkIbAR9Lt-DO0eNsyA
 """
 
-!pip install -q transformers accelerate sentencepiece
+# =============================================================================
+# LLM Call Template
+# Model: TinyLlama (可替換成其他 HuggingFace 模型)
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Cell 1：安裝套件（只需執行一次）
+# -----------------------------------------------------------------------------
+
+import os
+os.system("pip install -q transformers accelerate sentencepiece")
+
+# -----------------------------------------------------------------------------
+# Cell 2：載入模型（只需執行一次，之後重複測試不用重跑）
+# -----------------------------------------------------------------------------
 
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
-model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+# ⚙️ 設定區（修改這裡來切換模型或行為）
+MODEL_NAME     = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"  # 替換成任何 HuggingFace Chat 模型
+MAX_NEW_TOKENS = 200
+DO_SAMPLE      = False  # True = 隨機生成（創意）；False = 確定性生成（精準）
 
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+def load_model(model_name: str = MODEL_NAME):
+    """載入 tokenizer 與模型，回傳 (tokenizer, model)"""
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+        device_map="auto"
+    )
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    return tokenizer, model
 
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype=torch.float16,
-    device_map="auto"
-)
+def llm(messages: list) -> str:
+    """
+    傳入完整對話歷史，回傳模型生成的文字。
 
-if tokenizer.pad_token is None:
-    tokenizer.pad_token = tokenizer.eos_token
+    Args:
+        messages: [{"role": "system/user/assistant", "content": "..."}]
 
-def llm(user_message):
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant. Answer concisely."},
-        {"role": "user", "content": user_message}
-    ]
-
-    # 用官方 chat template
+    Returns:
+        模型生成的回覆字串
+    """
     prompt = tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
-
     inputs = tokenizer(prompt, return_tensors="pt")
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
     output = model.generate(
         **inputs,
-        max_new_tokens=200,
-        do_sample=False,
+        max_new_tokens=MAX_NEW_TOKENS,
+        do_sample=DO_SAMPLE,
         pad_token_id=tokenizer.pad_token_id,
-        eos_token_id=tokenizer.eos_token_id  # 加這行，讓模型知道何時停止
+        eos_token_id=tokenizer.eos_token_id
     )
 
-    # 只取新生成的 token（去掉 prompt 部分）
     new_tokens = output[0][inputs["input_ids"].shape[1]:]
     return tokenizer.decode(new_tokens, skip_special_tokens=True)
 
-print(llm("15 * 12 = "))
+tokenizer, model = load_model()
+print("✅ 模型載入完成")
 
+# -----------------------------------------------------------------------------
+# Cell 3：執行（修改 SYSTEM_PROMPT / USER_PROMPT 後重複跑這格）
+# -----------------------------------------------------------------------------
+
+# ✏️ 修改這裡
+SYSTEM_PROMPT = "You are a helpful assistant. Answer concisely."
+USER_PROMPT   = "15 * 12 是多少？"
+
+MESSAGES = [
+    {"role": "system", "content": SYSTEM_PROMPT},
+    {"role": "user",   "content": USER_PROMPT}
+]
+
+print(f"問題：{USER_PROMPT}")
+print(f"回答：{llm(MESSAGES)}")
