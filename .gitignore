@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# virtual env
+venv/
+.env/
+
+# logs
+*.log
+
+# dataset
+data/
+
+# model weights
+*.pt
+*.pth
+*.ckpt
+*.bin
+
+# OS
+.DS_Store
