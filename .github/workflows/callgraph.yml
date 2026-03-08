@@ -1,0 +1,35 @@
+name: Generate Call Graph
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+          pip install pyan3
+
+      - name: Generate callgraph
+        run: python scripts/generate_callgraph.py
+
+      - name: Update latest symlink
+        run: |
+          LATEST_DIR=callgraphs/latest
+          mkdir -p $LATEST_DIR
+          cp -r callgraphs/*/*png $LATEST_DIR/
+
+      - name: Commit and push
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add callgraphs
+          git commit -m "update callgraphs" || echo "no change"
+          git push
