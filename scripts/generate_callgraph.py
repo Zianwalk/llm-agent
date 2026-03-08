@@ -28,7 +28,7 @@ for root, dirs, files in os.walk("."):
             py_files.append(os.path.join(root, f))
 
 # 生成 dot graph
-cmd = ["pyan", *py_files, "--dot"]
+cmd = ["pyan3", *py_files, "--dot"]
 with open(GRAPH_DOT, "w") as f:
     subprocess.run(cmd, stdout=f)
 
