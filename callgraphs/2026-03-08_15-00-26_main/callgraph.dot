@@ -1,0 +1,21 @@
+digraph callgraph {
+  graph [rankdir=LR, bgcolor="#0d1117", pad=0.6, splines=curved, fontname="Courier New"];
+  node  [shape=box, style="filled,rounded", fillcolor="#161b22", fontcolor="#c9d1d9",
+         fontname="Courier New", fontsize=12, color="#30363d"];
+  edge  [color="#58a6ff", arrowsize=0.7, penwidth=1.3];
+  agent [label="agent"];
+  agent__build_tool_prompt [label="build_tool_prompt"];
+  agent__calculator [label="calculator"];
+  agent__llm [label="llm"];
+  agent__load_model [label="load_model"];
+  agent__parse_tool_call [label="parse_tool_call"];
+  llm_call [label="llm_call"];
+  agent -> agent__build_tool_prompt;
+  agent -> agent__calculator;
+  agent -> agent__llm;
+  agent -> agent__load_model;
+  agent -> agent__parse_tool_call;
+  agent__llm -> agent__load_model;
+  llm_call -> agent__llm;
+  llm_call -> agent__load_model;
+}
