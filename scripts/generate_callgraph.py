@@ -1,5 +1,6 @@
 import subprocess
 import os
+import re
 import json
 import shutil
 from datetime import datetime
@@ -24,7 +25,7 @@ os.makedirs(LATEST_DIR, exist_ok=True)
 
 EXCLUDE_DIRS = {".git", "callgraphs", "__pycache__", ".venv", "venv", "scripts"}
 
-# ── 找所有 .py 檔（排除 scripts/ 自身）───────────────────────────
+# ── 找所有 .py 檔 ─────────────────────────────────────────────────
 py_files = []
 for root, dirs, files in os.walk("."):
     dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
@@ -38,30 +39,73 @@ if not py_files:
 
 print(f"Analysing {len(py_files)} file(s): {py_files}")
 
-# ── pyan3：--uses 只畫呼叫關係，--no-defines 去掉重複定義節點 ────
+# ── pyan3 產生原始 dot ────────────────────────────────────────────
+raw_dot_path = os.path.join(OUTPUT_DIR, "callgraph_raw.dot")
 cmd = ["pyan3", *py_files, "--uses", "--no-defines", "--dot"]
-with open(GRAPH_DOT, "w") as f:
+with open(raw_dot_path, "w") as f:
     result = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE)
 
 if result.returncode != 0:
     print("pyan3 error:", result.stderr.decode())
     exit(1)
 
-# ── 讀 dot，注入深色樣式 ──────────────────────────────────────────
-with open(GRAPH_DOT) as f:
-    dot_raw = f.read()
+with open(raw_dot_path) as f:
+    raw = f.read()
 
-style_header = (
-    '  graph [rankdir=LR, bgcolor="#0d1117", pad=0.6, splines=curved, fontname="Courier New"];\n'
-    '  node  [shape=box, style="filled,rounded", fillcolor="#161b22", fontcolor="#c9d1d9",\n'
-    '         fontname="Courier New", fontsize=11, color="#30363d"];\n'
-    '  edge  [color="#58a6ff", arrowsize=0.7, penwidth=1.2];\n'
-)
+# ── 後處理：合併同 label 的重複節點 ──────────────────────────────
+# pyan3 產生的節點格式：  node_id [label="funcname", ...]
+# 同名函數會有不同 node_id 但相同 label
 
-dot_styled = dot_raw.replace("{", "{\n" + style_header, 1)
+# 1. 收集所有節點的 id → label 對應
+id_to_label: dict[str, str] = {}
+for m in re.finditer(r'(\w+)\s*\[.*?label\s*=\s*"([^"]+)"', raw):
+    node_id, label = m.group(1), m.group(2)
+    id_to_label[node_id] = label
+
+# 2. 對每個 label，選第一個出現的 node_id 作為「代表」
+label_to_canonical: dict[str, str] = {}
+for node_id, label in id_to_label.items():
+    if label not in label_to_canonical:
+        label_to_canonical[label] = node_id
+
+# id → canonical id
+id_to_canonical: dict[str, str] = {
+    nid: label_to_canonical[lbl]
+    for nid, lbl in id_to_label.items()
+}
+
+# 3. 收集邊（用 canonical id）
+edges: set[tuple[str, str]] = set()
+for m in re.finditer(r'(\w+)\s*->\s*(\w+)', raw):
+    src = id_to_canonical.get(m.group(1), m.group(1))
+    dst = id_to_canonical.get(m.group(2), m.group(2))
+    if src != dst:
+        edges.add((src, dst))
+
+# 4. 只保留 canonical 節點
+canonical_ids = set(label_to_canonical.values())
+
+# 5. 重建 dot
+dot_lines = [
+    "digraph callgraph {",
+    '  graph [rankdir=LR, bgcolor="#0d1117", pad=0.6, splines=curved, fontname="Courier New"];',
+    '  node  [shape=box, style="filled,rounded", fillcolor="#161b22", fontcolor="#c9d1d9",',
+    '         fontname="Courier New", fontsize=12, color="#30363d"];',
+    '  edge  [color="#58a6ff", arrowsize=0.7, penwidth=1.3];',
+]
+
+for nid in sorted(canonical_ids):
+    label = id_to_label.get(nid, nid)
+    dot_lines.append(f'  {nid} [label="{label}"];')
+
+for src, dst in sorted(edges):
+    dot_lines.append(f'  {src} -> {dst};')
+
+dot_lines.append("}")
+dot_content = "\n".join(dot_lines)
 
 with open(GRAPH_DOT, "w") as f:
-    f.write(dot_styled)
+    f.write(dot_content)
 
 # ── PNG ───────────────────────────────────────────────────────────
 r = subprocess.run(["dot", "-Tpng", GRAPH_DOT, "-o", GRAPH_PNG], capture_output=True)
@@ -70,24 +114,15 @@ if r.returncode != 0:
 else:
     print(f"PNG  → {GRAPH_PNG}")
 
-# ── 解析 dot 取節點/邊，產生互動 HTML ────────────────────────────
-import re
-
-node_ids: set[str] = set()
-edge_list: list[tuple[str, str]] = []
-
-for line in dot_raw.splitlines():
-    m = re.match(r'\s*"?([^">\s]+)"?\s*->\s*"?([^";\s]+)"?', line)
-    if m:
-        src, dst = m.group(1).strip('"'), m.group(2).strip('"')
-        edge_list.append((src, dst))
-        node_ids.update([src, dst])
-    elif re.match(r'\s*"?(\w+)"?\s*\[', line):
-        n = re.match(r'\s*"?(\w+)"?', line).group(1)
-        node_ids.add(n)
-
-vis_nodes = json.dumps([{"id": n, "label": n} for n in sorted(node_ids)])
-vis_edges = json.dumps([{"from": s, "to": d, "arrows": "to"} for s, d in edge_list])
+# ── 互動式 HTML ───────────────────────────────────────────────────
+vis_nodes = json.dumps([
+    {"id": nid, "label": id_to_label.get(nid, nid)}
+    for nid in sorted(canonical_ids)
+])
+vis_edges = json.dumps([
+    {"from": s, "to": d, "arrows": "to"}
+    for s, d in sorted(edges)
+])
 
 html = f"""<!DOCTYPE html>
 <html lang="zh-Hant">
@@ -117,7 +152,7 @@ const edges = new vis.DataSet({vis_edges});
 const options = {{
   physics:{{solver:"forceAtlas2Based",forceAtlas2Based:{{gravitationalConstant:-80,springLength:130}},stabilization:{{iterations:250}}}},
   nodes:{{
-    shape:"box",borderRadius:6,
+    shape:"box", borderRadius:6,
     color:{{background:"#161b22",border:"#30363d",highlight:{{background:"#1f6feb",border:"#58a6ff"}}}},
     font:{{color:"#c9d1d9",face:"Courier New",size:13}},
     shadow:{{enabled:true,color:"rgba(0,0,0,.5)",x:2,y:2,size:8}}

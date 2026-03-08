@@ -22,17 +22,21 @@ jobs:
       - name: Generate callgraph
         run: python scripts/generate_callgraph.py
 
-      - name: Update latest
+      - name: Keep only latest output
         run: |
-          LATEST_DIR=callgraphs/latest
-          mkdir -p $LATEST_DIR
-          cp callgraphs/$(ls callgraphs/ | grep -v latest | sort | tail -1)/*.png $LATEST_DIR/
-          cp callgraphs/$(ls callgraphs/ | grep -v latest | sort | tail -1)/*.html $LATEST_DIR/
+          LATEST=$(ls callgraphs/ | grep -v latest | sort | tail -1)
+          for dir in callgraphs/*/; do
+            dirname=$(basename "$dir")
+            if [ "$dirname" != "latest" ] && [ "$dirname" != "$LATEST" ]; then
+              rm -rf "$dir"
+            fi
+          done
 
       - name: Commit and push
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add callgraphs
+          git rm -r --cached --ignore-unmatch $(git ls-files --deleted callgraphs/)
           git commit -m "update callgraphs" || echo "no changes to commit"
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
