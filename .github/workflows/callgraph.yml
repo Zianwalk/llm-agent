@@ -22,11 +22,12 @@ jobs:
       - name: Generate callgraph
         run: python scripts/generate_callgraph.py
 
-      - name: Update latest symlink
+      - name: Update latest
         run: |
           LATEST_DIR=callgraphs/latest
           mkdir -p $LATEST_DIR
-          cp -r callgraphs/*/*png $LATEST_DIR/
+          cp callgraphs/$(ls callgraphs/ | grep -v latest | sort | tail -1)/*.png $LATEST_DIR/
+          cp callgraphs/$(ls callgraphs/ | grep -v latest | sort | tail -1)/*.html $LATEST_DIR/
 
       - name: Commit and push
         run: |
