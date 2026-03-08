@@ -36,7 +36,8 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
+          DELETED=$(git ls-files --deleted callgraphs/)
+          if [ -n "$DELETED" ]; then git rm -r --cached $DELETED; fi
           git add callgraphs
-          git rm -r --cached --ignore-unmatch $(git ls-files --deleted callgraphs/)
           git commit -m "update callgraphs" || echo "no changes to commit"
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
