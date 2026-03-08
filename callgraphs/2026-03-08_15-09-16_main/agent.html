@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<title>llm_call – 2026-03-08_15-04-31_main</title>
+<title>agent – 2026-03-08_15-09-16_main</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{background:#0d1117;font-family:'Courier New',monospace;color:#c9d1d9}
@@ -16,13 +16,13 @@
 </head>
 <body>
 <div id="header">
-  <h1>&#128336; llm_call</h1>
-  <span>main &nbsp;·&nbsp; 2026-03-08_15-04-31</span>
+  <h1>&#128336; agent</h1>
+  <span>main &nbsp;·&nbsp; 2026-03-08_15-09-16</span>
 </div>
 <div id="graph"></div>
 <script>
-const nodes = new vis.DataSet([{"id": "llm_call", "label": "llm_call"}, {"id": "llm_call__llm", "label": "llm"}, {"id": "llm_call__load_model", "label": "load_model"}]);
-const edges = new vis.DataSet([{"from": "llm_call", "to": "llm_call__llm", "arrows": "to"}, {"from": "llm_call", "to": "llm_call__load_model", "arrows": "to"}, {"from": "llm_call__llm", "to": "llm_call__load_model", "arrows": "to"}]);
+const nodes = new vis.DataSet([{"id": "agent", "label": "agent"}, {"id": "agent__build_tool_prompt", "label": "build_tool_prompt"}, {"id": "agent__calculator", "label": "calculator"}, {"id": "agent__llm", "label": "llm"}, {"id": "agent__load_model", "label": "load_model"}, {"id": "agent__parse_tool_call", "label": "parse_tool_call"}]);
+const edges = new vis.DataSet([{"from": "agent", "to": "agent__build_tool_prompt", "arrows": "to"}, {"from": "agent", "to": "agent__calculator", "arrows": "to"}, {"from": "agent", "to": "agent__llm", "arrows": "to"}, {"from": "agent", "to": "agent__load_model", "arrows": "to"}, {"from": "agent", "to": "agent__parse_tool_call", "arrows": "to"}, {"from": "agent__llm", "to": "agent__load_model", "arrows": "to"}]);
 const options = {
   physics:{solver:"forceAtlas2Based",forceAtlas2Based:{gravitationalConstant:-80,springLength:130},stabilization:{iterations:250}},
   nodes:{shape:"box",borderRadius:6,color:{background:"#161b22",border:"#30363d",highlight:{background:"#1f6feb",border:"#58a6ff"}},font:{color:"#c9d1d9",face:"Courier New",size:13},shadow:{enabled:true,color:"rgba(0,0,0,.5)",x:2,y:2,size:8}},

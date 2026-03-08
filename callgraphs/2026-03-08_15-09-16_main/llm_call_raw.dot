@@ -7,7 +7,7 @@ digraph G {
         llm_call__llm [label="llm", style="filled", fillcolor="#ffffffb2", fontcolor="#000000", group="0"];
         llm_call__load_model [label="load_model", style="filled", fillcolor="#ffffffb2", fontcolor="#000000", group="0"];
     }
-        llm_call -> llm_call__load_model [style="solid",  color="#000000"];
         llm_call -> llm_call__llm [style="solid",  color="#000000"];
+        llm_call -> llm_call__load_model [style="solid",  color="#000000"];
         llm_call__llm -> llm_call__load_model [style="solid",  color="#000000"];
     }

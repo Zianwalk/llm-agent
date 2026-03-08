@@ -12,9 +12,9 @@ digraph G {
         agent__parse_tool_call [label="parse_tool_call", style="filled", fillcolor="#ffffffb2", fontcolor="#000000", group="0"];
     }
         agent -> agent__agent [style="solid",  color="#000000"];
+        agent -> agent__calculator [style="solid",  color="#000000"];
         agent -> agent__load_model [style="solid",  color="#000000"];
         agent -> agent__build_tool_prompt [style="solid",  color="#000000"];
-        agent -> agent__calculator [style="solid",  color="#000000"];
         agent__llm -> agent__load_model [style="solid",  color="#000000"];
         agent__agent -> agent__llm [style="solid",  color="#000000"];
         agent__agent -> agent__parse_tool_call [style="solid",  color="#000000"];
