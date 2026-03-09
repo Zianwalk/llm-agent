@@ -1,0 +1,11 @@
+digraph "llm_call" {
+  graph [rankdir=TB, bgcolor="#0d1117", pad=0.8, ranksep=1.0, nodesep=0.7, fontname="Courier New"];
+  node  [shape=box, style="filled,rounded", fillcolor="#161b22", fontcolor="#c9d1d9",
+         fontname="Courier New", fontsize=12, color="#30363d", width=1.6];
+  edge  [arrowsize=0.7, penwidth=1.3];
+  { rank=same; llm }
+  { rank=same; load_model }
+  llm [label="llm"];
+  load_model [label="load_model"];
+  llm -> load_model [color="#f0883e", style=dashed, label="uses globals"];
+}
