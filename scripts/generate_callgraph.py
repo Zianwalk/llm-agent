@@ -200,10 +200,10 @@ def make_graph(filepath: str, out_dir: str):
 
     dot_lines = [
         f'digraph "{name}" {{',
-        '  graph [rankdir=TB, bgcolor="#0d1117", pad=0.8, ranksep=1.0, nodesep=0.7, fontname="Courier New"];',
-        '  node  [shape=box, style="filled,rounded", fillcolor="#161b22", fontcolor="#c9d1d9",',
-        '         fontname="Courier New", fontsize=12, color="#30363d", width=1.6];',
-        '  edge  [arrowsize=0.7, penwidth=1.3];',
+        '  graph [rankdir=TB, bgcolor="#0d1117", pad=0.8, ranksep=1.2, nodesep=0.8, fontname="Courier New"];',
+        '  node  [shape=box, style="filled,rounded", fillcolor="white", fontcolor="#111111",',
+        '         fontname="Courier New", fontsize=12, color="#888888", width=1.6, penwidth=1.5];',
+        '  edge  [arrowsize=0.8, penwidth=2.0];',
     ]
 
     # 同層節點用 rank=same 對齊
@@ -221,12 +221,12 @@ def make_graph(filepath: str, out_dir: str):
     # 直接呼叫：藍色實線
     for src, dst in sorted(call_edges):
         if src in funcs and dst in funcs:
-            dot_lines.append(f'  {src} -> {dst} [color="#58a6ff"];')
+            dot_lines.append(f'  {src} -> {dst} [color="#00cfff", penwidth=2.0];')
 
     # 全域變數依賴：橘色虛線
     for src, dst in sorted(global_edges):
         if src in funcs and dst in funcs:
-            dot_lines.append(f'  {src} -> {dst} [color="#f0883e", style=dashed, label="uses globals"];')
+            dot_lines.append(f'  {src} -> {dst} [color="#ffaa00", style=dashed, penwidth=2.0, label="   globals   ", fontcolor="white", fontsize=11, labeldistance=5.0, labelangle=45];')
 
     dot_lines.append("}")
 
@@ -245,8 +245,8 @@ def make_graph(filepath: str, out_dir: str):
         for f in sorted(show_nodes)
     ])
     vis_edges = json.dumps(
-        [{"from": s, "to": d, "color": {"color": "#58a6ff"}, "arrows": "to"} for s, d in sorted(call_edges) if s in funcs and d in funcs] +
-        [{"from": s, "to": d, "color": {"color": "#f0883e"}, "arrows": "to", "dashes": True, "label": "globals"} for s, d in sorted(global_edges) if s in funcs and d in funcs]
+        [{"from": s, "to": d, "color": {"color": "#00cfff"}, "arrows": "to"} for s, d in sorted(call_edges) if s in funcs and d in funcs] +
+        [{"from": s, "to": d, "color": {"color": "#ffaa00"}, "arrows": "to", "dashes": True, "label": "globals"} for s, d in sorted(global_edges) if s in funcs and d in funcs]
     )
 
     html = f"""<!DOCTYPE html>
@@ -256,9 +256,9 @@ def make_graph(filepath: str, out_dir: str):
 <title>{name} – {date}</title>
 <style>
   *{{margin:0;padding:0;box-sizing:border-box}}
-  body{{background:#0d1117;font-family:'Courier New',monospace;color:#c9d1d9}}
-  #header{{padding:14px 22px;border-bottom:1px solid #30363d;display:flex;align-items:center;justify-content:space-between}}
-  #header h1{{font-size:14px;color:#58a6ff;letter-spacing:.06em}}
+  body{{background:#0d1117;font-family:'Courier New',monospace;color:#ccccdd}}
+  #header{{padding:14px 22px;border-bottom:1px solid #444466;display:flex;align-items:center;justify-content:space-between}}
+  #header h1{{font-size:14px;color:#00cfff;letter-spacing:.06em}}
   #header span{{font-size:12px;color:#8b949e}}
   #legend{{display:flex;gap:20px;font-size:11px}}
   .dot{{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px}}
@@ -271,8 +271,8 @@ def make_graph(filepath: str, out_dir: str):
 <div id="header">
   <h1>&#128336; {name}</h1>
   <div id="legend">
-    <span><span class="dot" style="background:#58a6ff"></span>直接呼叫</span>
-    <span><span class="dot" style="background:#f0883e"></span>全域變數依賴</span>
+    <span><span class="dot" style="background:#00cfff"></span>直接呼叫</span>
+    <span><span class="dot" style="background:#ffaa00"></span>全域變數依賴</span>
   </div>
   <span>{branch} · {date}</span>
 </div>
@@ -283,7 +283,7 @@ const edges = new vis.DataSet({vis_edges});
 const options = {{
   layout:{{hierarchical:{{enabled:true,direction:"UD",sortMethod:"directed",levelSeparation:120,nodeSpacing:160,treeSpacing:200}}}},
   physics:{{enabled:false}},
-  nodes:{{shape:"box",borderRadius:6,color:{{background:"#161b22",border:"#30363d",highlight:{{background:"#1f6feb",border:"#58a6ff"}}}},font:{{color:"#c9d1d9",face:"Courier New",size:13}},shadow:{{enabled:true,color:"rgba(0,0,0,.5)",x:2,y:2,size:8}}}},
+  nodes:{{shape:"box",borderRadius:6,color:{{background:"#ffffff",border:"#888888",highlight:{{background:"#e8f4ff",border:"#00cfff"}}}},font:{{color:"#111111",face:"Courier New",size:13}},shadow:{{enabled:true,color:"rgba(0,0,0,.4)",x:2,y:2,size:6}}}},
   edges:{{smooth:{{type:"cubicBezier",forceDirection:"vertical"}},arrows:{{to:{{enabled:true,scaleFactor:0.7}}}},font:{{color:"#8b949e",size:10}}}},
   interaction:{{hover:true,zoomView:true}}
 }};
