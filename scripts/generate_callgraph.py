@@ -29,9 +29,9 @@ EXCLUDE_DIRS = {".git", "callgraphs", "__pycache__", ".venv", "venv", "scripts"}
 def analyze(filepath: str):
     """
     回傳:
-      funcs        : set of function names defined in this file
-      call_edges   : set of (caller, callee) — 直接呼叫
-      global_edges : set of (func, producer_func) — 全域變數依賴
+      funcs      : set of function names defined in this file
+      edges      : set of (func, depends_on) — 所有依賴（直接呼叫 + 變數依賴 + dict依賴）
+      var_edges  : set of (func, depends_on) — 只有變數產生的依賴（用於畫虛線）
     """
     with open(filepath, encoding="utf-8") as f:
         src = f.read()
@@ -41,113 +41,103 @@ def analyze(filepath: str):
         print(f"  SyntaxError in {filepath}: {e}")
         return set(), set(), set()
 
-    # 1. 找出所有頂層定義的函數
+    # 1. 所有定義的函數
     funcs: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             funcs.add(node.name)
 
-    # 2. 找出全域賦值：var = some_func(...) 或 var, var2 = some_func(...)
-    #    → 記錄 global_var → produced_by_func
-    global_producers: dict[str, str] = {}  # var_name → func_name
-    for node in ast.iter_child_nodes(tree):  # 只看頂層
-        if isinstance(node, ast.Assign):
-            # 找右側呼叫的函數名
+    # 2. 頂層變數來源表：var → 產生它的函數
+    var_source: dict[str, str] = {}
+    for node in ast.iter_child_nodes(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if isinstance(node.value, ast.Call):
             producer = None
-            if isinstance(node.value, ast.Call):
-                if isinstance(node.value.func, ast.Name):
-                    producer = node.value.func.id
-                elif isinstance(node.value.func, ast.Attribute):
-                    producer = node.value.func.attr
+            if isinstance(node.value.func, ast.Name):
+                producer = node.value.func.id
+            elif isinstance(node.value.func, ast.Attribute):
+                producer = node.value.func.attr
             if producer and producer in funcs:
-                # 左側可能是 tuple: a, b = func()
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        global_producers[target.id] = producer
-                    elif isinstance(target, ast.Tuple):
-                        for elt in target.elts:
-                            if isinstance(elt, ast.Name):
-                                global_producers[elt.id] = producer
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        var_source[t.id] = producer
+                    elif isinstance(t, ast.Tuple):
+                        for e in t.elts:
+                            if isinstance(e, ast.Name):
+                                var_source[e.id] = producer
 
-    # 3. 找頂層 dict 賦值：TOOLS = {"KEY": func, ...}
-    dict_to_funcs: dict[str, set] = {}
+    # 3. 頂層 dict：TOOLS = {"KEY": func} → dict名 → {func, ...}
+    dict_contents: dict[str, set] = {}
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
                     contained = {v.id for v in node.value.values
                                  if isinstance(v, ast.Name) and v.id in funcs}
                     if contained:
-                        dict_to_funcs[target.id] = contained
+                        dict_contents[t.id] = contained
 
-    # 4. 分析每個函數內部：直接呼叫 + 使用的全域變數 + dict 動態呼叫
-    call_edges: set[tuple[str, str]] = set()
-    global_edges: set[tuple[str, str]] = set()
+    # 4. 分析每個函數：用到的變數 → 依賴
+    call_edges: set[tuple[str, str]] = set()   # 直接呼叫 / dict 動態呼叫
+    var_edges:  set[tuple[str, str]] = set()   # 變數依賴（畫虛線）
 
-    class FuncVisitor(ast.NodeVisitor):
+    class Visitor(ast.NodeVisitor):
         def __init__(self):
-            self.current: str | None = None
+            self.current = None
             self.local_vars: set[str] = set()
 
         def visit_FunctionDef(self, node):
             prev, prev_locals = self.current, self.local_vars
             self.current = node.name
-            self.local_vars = set()
-            # 收集函數參數為 local
-            for arg in node.args.args:
-                self.local_vars.add(arg.arg)
+            self.local_vars = {a.arg for a in node.args.args}
             self.generic_visit(node)
             self.current, self.local_vars = prev, prev_locals
 
         visit_AsyncFunctionDef = visit_FunctionDef
 
         def visit_Assign(self, node):
-            # 收集函數內部的 local 變數名
             if self.current:
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        self.local_vars.add(target.id)
-            self.generic_visit(node)
-
-        def visit_Call(self, node):
-            if self.current:
-                callee = None
-                if isinstance(node.func, ast.Name):
-                    callee = node.func.id
-                elif isinstance(node.func, ast.Attribute):
-                    callee = node.func.attr
-                if callee and callee in funcs and callee != self.current:
-                    call_edges.add((self.current, callee))
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        self.local_vars.add(t.id)
+                    elif isinstance(t, ast.Tuple):
+                        for e in t.elts:
+                            if isinstance(e, ast.Name):
+                                self.local_vars.add(e.id)
             self.generic_visit(node)
 
         def visit_Name(self, node):
-            # 使用了某個名稱（非賦值）
-            if self.current and isinstance(node.ctx, ast.Load):
-                name = node.id
-                # 是全域變數（不是 local，不是函數名本身）且有生產者
-                if (name not in self.local_vars
-                        and name not in funcs
-                        and name in global_producers):
-                    producer = global_producers[name]
-                    if producer != self.current:
-                        global_edges.add((self.current, producer))
-                # dict 動態呼叫：用了 TOOLS 就依賴 TOOLS 內的所有函數
-                if name in dict_to_funcs:
-                    for contained in dict_to_funcs[name]:
-                        if contained != self.current:
-                            call_edges.add((self.current, contained))
+            if not self.current or not isinstance(node.ctx, ast.Load):
+                self.generic_visit(node)
+                return
+            name = node.id
+            if name in self.local_vars:
+                pass
+            elif name in funcs and name != self.current:
+                # 直接引用或呼叫函數
+                call_edges.add((self.current, name))
+            elif name in var_source:
+                # 用到由某函數產生的全域變數
+                src_func = var_source[name]
+                if src_func != self.current:
+                    var_edges.add((self.current, src_func))
+            elif name in dict_contents:
+                # 用到 dict → 依賴 dict 內所有函數
+                for f in dict_contents[name]:
+                    if f != self.current:
+                        call_edges.add((self.current, f))
             self.generic_visit(node)
 
-    FuncVisitor().visit(tree)
-    return funcs, call_edges, global_edges
-
+    Visitor().visit(tree)
+    return funcs, call_edges, var_edges
 
 def make_graph(filepath: str, out_dir: str):
     name = os.path.splitext(os.path.basename(filepath))[0]
     print(f"\n[{name}]")
 
-    funcs, call_edges, global_edges = analyze(filepath)
-    all_edges = call_edges | global_edges
+    funcs, call_edges, var_edges = analyze(filepath)
+    all_edges = call_edges | var_edges
 
     if not funcs:
         print("  No functions found, skipping.")
@@ -224,7 +214,7 @@ def make_graph(filepath: str, out_dir: str):
             dot_lines.append(f'  {src} -> {dst} [color="#00cfff", penwidth=2.0];')
 
     # 全域變數依賴：橘色虛線
-    for src, dst in sorted(global_edges):
+    for src, dst in sorted(var_edges):
         if src in funcs and dst in funcs:
             dot_lines.append(f'  {src} -> {dst} [color="#ffaa00", style=dashed, penwidth=2.0, label="   globals   ", fontcolor="white", fontsize=11, labeldistance=5.0, labelangle=45];')
 
