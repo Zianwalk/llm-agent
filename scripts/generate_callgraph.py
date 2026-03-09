@@ -236,7 +236,7 @@ def make_graph(filepath: str, out_dir: str):
     ])
     vis_edges = json.dumps(
         [{"from": s, "to": d, "color": {"color": "#00cfff"}, "arrows": "to"} for s, d in sorted(call_edges) if s in funcs and d in funcs] +
-        [{"from": s, "to": d, "color": {"color": "#ffaa00"}, "arrows": "to", "dashes": True, "label": "globals"} for s, d in sorted(global_edges) if s in funcs and d in funcs]
+        [{"from": s, "to": d, "color": {"color": "#ffaa00"}, "arrows": "to", "dashes": True, "label": "globals"} for s, d in sorted(var_edges) if s in funcs and d in funcs]
     )
 
     html = f"""<!DOCTYPE html>
