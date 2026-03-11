@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<title>llm_call – 2026-03-11_10-29-03</title>
+<title>agent – 2026-03-11_10-54-19</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{background:#0d1117;font-family:'Courier New',monospace;color:#ccccdd}
@@ -18,17 +18,17 @@
 </head>
 <body>
 <div id="header">
-  <h1>&#128336; llm_call</h1>
+  <h1>&#128336; agent</h1>
   <div id="legend">
     <span><span class="dot" style="background:#00cfff"></span>直接呼叫</span>
     <span><span class="dot" style="background:#ffaa00"></span>全域變數依賴</span>
   </div>
-  <span>main · 2026-03-11_10-29-03</span>
+  <span>main · 2026-03-11_10-54-19</span>
 </div>
 <div id="graph"></div>
 <script>
-const nodes = new vis.DataSet([{"id": "llm", "label": "llm", "level": 1}, {"id": "load_model", "label": "load_model", "level": 0}]);
-const edges = new vis.DataSet([{"from": "load_model", "to": "llm", "color": {"color": "#00cfff"}, "arrows": "to"}]);
+const nodes = new vis.DataSet([{"id": "agent", "label": "agent", "level": 2}, {"id": "build_tool_prompt", "label": "build_tool_prompt", "level": 1}, {"id": "calculator", "label": "calculator", "level": 0}, {"id": "llm", "label": "llm", "level": 1}, {"id": "load_model", "label": "load_model", "level": 0}, {"id": "parse_tool_call", "label": "parse_tool_call", "level": 1}]);
+const edges = new vis.DataSet([{"from": "build_tool_prompt", "to": "agent", "color": {"color": "#00cfff"}, "arrows": "to"}, {"from": "calculator", "to": "agent", "color": {"color": "#00cfff"}, "arrows": "to"}, {"from": "calculator", "to": "build_tool_prompt", "color": {"color": "#00cfff"}, "arrows": "to"}, {"from": "calculator", "to": "parse_tool_call", "color": {"color": "#00cfff"}, "arrows": "to"}, {"from": "llm", "to": "agent", "color": {"color": "#00cfff"}, "arrows": "to"}, {"from": "load_model", "to": "llm", "color": {"color": "#00cfff"}, "arrows": "to"}, {"from": "parse_tool_call", "to": "agent", "color": {"color": "#00cfff"}, "arrows": "to"}]);
 const options = {
   layout:{hierarchical:{enabled:true,direction:"UD",sortMethod:"directed",levelSeparation:120,nodeSpacing:160,treeSpacing:200}},
   physics:{enabled:false},

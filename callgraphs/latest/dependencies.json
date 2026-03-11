@@ -43,7 +43,7 @@
     "variable_dependencies": [
       {
         "from": "agent",
-        "to": "llm"
+        "to": "calculator"
       },
       {
         "from": "agent",
@@ -51,7 +51,7 @@
       },
       {
         "from": "agent",
-        "to": "calculator"
+        "to": "llm"
       },
       {
         "from": "agent",
