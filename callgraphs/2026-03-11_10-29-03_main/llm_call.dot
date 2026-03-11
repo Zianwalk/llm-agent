@@ -3,9 +3,9 @@ digraph "llm_call" {
   node  [shape=box, style="filled,rounded", fillcolor="white", fontcolor="#111111",
          fontname="Courier New", fontsize=12, color="#888888", width=1.6, penwidth=1.5];
   edge  [arrowsize=0.8, penwidth=2.0];
-  { rank=same; llm }
   { rank=same; load_model }
+  { rank=same; llm }
   llm [label="llm"];
   load_model [label="load_model"];
-  llm -> load_model [color="#ffaa00", style=dashed, penwidth=2.0, label="   globals   ", fontcolor="white", fontsize=11, labeldistance=5.0, labelangle=45];
+  load_model -> llm [color="#00cfff", penwidth=2.0];
 }

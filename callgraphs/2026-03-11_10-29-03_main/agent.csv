@@ -1,0 +1,7 @@
+function_name,var_1,var_2,var_3,var_4,var_5
+load_model,MODEL_NAME,,,,
+llm,load_model,k,v,MAX_NEW_TOKENS,DO_SAMPLE
+calculator,,,,,
+build_tool_prompt,name,TOOLS,calculator,,
+parse_tool_call,line,TOOLS,calculator,name,
+agent,llm,parse_tool_call,TOOLS,calculator,build_tool_prompt

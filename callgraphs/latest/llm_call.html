@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<title>llm_call – 2026-03-09_09-02-05</title>
+<title>llm_call – 2026-03-11_10-29-03</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{background:#0d1117;font-family:'Courier New',monospace;color:#ccccdd}
@@ -23,12 +23,12 @@
     <span><span class="dot" style="background:#00cfff"></span>直接呼叫</span>
     <span><span class="dot" style="background:#ffaa00"></span>全域變數依賴</span>
   </div>
-  <span>main · 2026-03-09_09-02-05</span>
+  <span>main · 2026-03-11_10-29-03</span>
 </div>
 <div id="graph"></div>
 <script>
-const nodes = new vis.DataSet([{"id": "llm", "label": "llm", "level": 0}, {"id": "load_model", "label": "load_model", "level": 1}]);
-const edges = new vis.DataSet([{"from": "llm", "to": "load_model", "color": {"color": "#ffaa00"}, "arrows": "to", "dashes": true, "label": "globals"}]);
+const nodes = new vis.DataSet([{"id": "llm", "label": "llm", "level": 1}, {"id": "load_model", "label": "load_model", "level": 0}]);
+const edges = new vis.DataSet([{"from": "load_model", "to": "llm", "color": {"color": "#00cfff"}, "arrows": "to"}]);
 const options = {
   layout:{hierarchical:{enabled:true,direction:"UD",sortMethod:"directed",levelSeparation:120,nodeSpacing:160,treeSpacing:200}},
   physics:{enabled:false},
