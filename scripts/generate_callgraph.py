@@ -2,10 +2,14 @@ import subprocess
 import os
 import re
 import ast
+import csv
 import json
 import shutil
+import builtins
 from collections import defaultdict
 from datetime import datetime
+
+BUILTINS = set(dir(builtins))
 
 # ── 取得 branch 名稱 ──────────────────────────────────────────────
 try:
@@ -27,19 +31,13 @@ EXCLUDE_DIRS = {".git", "callgraphs", "__pycache__", ".venv", "venv", "scripts"}
 
 # ── AST 分析：抓直接呼叫 + 全域變數依賴 ──────────────────────────
 def analyze(filepath: str):
-    """
-    回傳:
-      funcs      : set of function names defined in this file
-      edges      : set of (func, depends_on) — 所有依賴（直接呼叫 + 變數依賴 + dict依賴）
-      var_edges  : set of (func, depends_on) — 只有變數產生的依賴（用於畫虛線）
-    """
     with open(filepath, encoding="utf-8") as f:
         src = f.read()
     try:
         tree = ast.parse(src, filename=filepath)
     except SyntaxError as e:
         print(f"  SyntaxError in {filepath}: {e}")
-        return set(), set(), set()
+        return set(), set(), set(), {}
 
     # 1. 所有定義的函數
     funcs: set[str] = set()
@@ -47,12 +45,31 @@ def analyze(filepath: str):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             funcs.add(node.name)
 
-    # 2. 頂層變數來源表：var → 產生它的函數
+    # 2. import 名稱
+    imports: set[str] = set()
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imports.add(alias.asname or alias.name)
+
+    # 3. 頂層 dict：TOOLS = {"KEY": func} → dict名 → {func, ...}
+    dict_contents: dict[str, set] = {}
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    contained = {v.id for v in node.value.values
+                                 if isinstance(v, ast.Name) and v.id in funcs}
+                    if contained:
+                        dict_contents[t.id] = contained
+
+    # 4. 頂層變數來源：tokenizer, model = load_model() → var → producer
     var_source: dict[str, str] = {}
     for node in ast.iter_child_nodes(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        if isinstance(node.value, ast.Call):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
             producer = None
             if isinstance(node.value.func, ast.Name):
                 producer = node.value.func.id
@@ -67,36 +84,57 @@ def analyze(filepath: str):
                             if isinstance(e, ast.Name):
                                 var_source[e.id] = producer
 
-    # 3. 頂層 dict：TOOLS = {"KEY": func} → dict名 → {func, ...}
-    dict_contents: dict[str, set] = {}
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
-            for t in node.targets:
-                if isinstance(t, ast.Name):
-                    contained = {v.id for v in node.value.values
-                                 if isinstance(v, ast.Name) and v.id in funcs}
-                    if contained:
-                        dict_contents[t.id] = contained
+    # 5. 函數參數名稱
+    func_params: dict[str, list] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            func_params[node.name] = [a.arg for a in node.args.args]
 
-    # 4. 分析每個函數：用到的變數 → 依賴
-    call_edges: set[tuple[str, str]] = set()   # 直接呼叫 / dict 動態呼叫
-    var_edges:  set[tuple[str, str]] = set()   # 變數依賴（畫虛線）
+    # 6. 找呼叫時傳入 dict 的對應：func(TOOLS) → call_dict_params[func][param] = dict名
+    call_dict_params: dict[str, dict] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            callee = None
+            if isinstance(node.func, ast.Name):
+                callee = node.func.id
+            if callee and callee in funcs and callee in func_params:
+                params = func_params[callee]
+                for i, arg in enumerate(node.args):
+                    if isinstance(arg, ast.Name) and arg.id in dict_contents:
+                        if i < len(params):
+                            if callee not in call_dict_params:
+                                call_dict_params[callee] = {}
+                            call_dict_params[callee][params[i]] = arg.id
 
-    class Visitor(ast.NodeVisitor):
+    # 7. 分析每個函數用到的外部變數
+    class VarVisitor(ast.NodeVisitor):
         def __init__(self):
             self.current = None
+            self.params: set[str] = set()
             self.local_vars: set[str] = set()
+            self.comp_vars: set[str] = set()
+            self.func_vars: dict[str, list] = {}
 
         def visit_FunctionDef(self, node):
-            prev, prev_locals = self.current, self.local_vars
+            prev = self.current
+            prev_params = self.params
+            prev_locals = self.local_vars
+            prev_comp = self.comp_vars
             self.current = node.name
-            self.local_vars = {a.arg for a in node.args.args}
+            self.params = {a.arg for a in node.args.args}
+            self.local_vars = set()
+            self.comp_vars = set()
+            self.func_vars[node.name] = []
             self.generic_visit(node)
-            self.current, self.local_vars = prev, prev_locals
+            self.current = prev
+            self.params = prev_params
+            self.local_vars = prev_locals
+            self.comp_vars = prev_comp
 
         visit_AsyncFunctionDef = visit_FunctionDef
 
         def visit_Assign(self, node):
+            self.generic_visit(node.value)
             if self.current:
                 for t in node.targets:
                     if isinstance(t, ast.Name):
@@ -105,6 +143,14 @@ def analyze(filepath: str):
                         for e in t.elts:
                             if isinstance(e, ast.Name):
                                 self.local_vars.add(e.id)
+
+        def visit_comprehension(self, node):
+            if isinstance(node.target, ast.Name):
+                self.comp_vars.add(node.target.id)
+            elif isinstance(node.target, ast.Tuple):
+                for e in node.target.elts:
+                    if isinstance(e, ast.Name):
+                        self.comp_vars.add(e.id)
             self.generic_visit(node)
 
         def visit_Name(self, node):
@@ -112,32 +158,134 @@ def analyze(filepath: str):
                 self.generic_visit(node)
                 return
             name = node.id
-            if name in self.local_vars:
-                pass
-            elif name in funcs and name != self.current:
-                # 直接引用或呼叫函數
-                call_edges.add((self.current, name))
-            elif name in var_source:
-                # 用到由某函數產生的全域變數
-                src_func = var_source[name]
-                if src_func != self.current:
-                    var_edges.add((self.current, src_func))
+            vars_list = self.func_vars[self.current]
+
+            # dict 參數展開優先（在 params 過濾之前）：tools → TOOLS + calculator
+            if (self.current in call_dict_params
+                    and name in call_dict_params[self.current]):
+                dict_name = call_dict_params[self.current][name]
+                if dict_name not in vars_list:
+                    vars_list.append(dict_name)
+                for f in sorted(dict_contents.get(dict_name, set())):
+                    if f not in vars_list:
+                        vars_list.append(f)
+                self.generic_visit(node)
+                return
+
+            if (name in self.params
+                    or name in self.local_vars
+                    or name in self.comp_vars
+                    or name in BUILTINS
+                    or name in imports
+                    or name.startswith("_")
+                    or name == self.current):
+                self.generic_visit(node)
+                return
+
+            # 全域 dict 直接使用
             elif name in dict_contents:
-                # 用到 dict → 依賴 dict 內所有函數
-                for f in dict_contents[name]:
-                    if f != self.current:
-                        call_edges.add((self.current, f))
+                if name not in vars_list:
+                    vars_list.append(name)
+                for f in sorted(dict_contents[name]):
+                    if f not in vars_list:
+                        vars_list.append(f)
+            # 全域變數由函數產生
+            elif name in var_source:
+                producer = var_source[name]
+                if producer not in vars_list:
+                    vars_list.append(producer)
+            else:
+                if name not in vars_list:
+                    vars_list.append(name)
+
             self.generic_visit(node)
 
-    Visitor().visit(tree)
-    return funcs, call_edges, var_edges
+    vov = VarVisitor()
+    vov.visit(tree)
+    func_vars = vov.func_vars
+
+    # 8. 頂層賦值鏈：SYSTEM_PROMPT = build_tool_prompt(TOOLS)
+    #    → agent(MESSAGES) 間接依賴 build_tool_prompt
+    def collect_top_calls(node, result: set):
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call):
+                if isinstance(child.func, ast.Name) and child.func.id in funcs:
+                    result.add(child.func.id)
+
+    top_var_funcs: dict[str, set] = {}
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    deps: set = set()
+                    collect_top_calls(node.value, deps)
+                    for child in ast.walk(node.value):
+                        if isinstance(child, ast.Name) and child.id in top_var_funcs:
+                            deps.update(top_var_funcs[child.id])
+                    if deps:
+                        top_var_funcs[t.id] = deps
+
+    class TopCallInjector(ast.NodeVisitor):
+        def __init__(self):
+            self.current = None
+        def visit_FunctionDef(self, node):
+            prev = self.current
+            self.current = node.name
+            self.generic_visit(node)
+            self.current = prev
+        visit_AsyncFunctionDef = visit_FunctionDef
+        def visit_Call(self, node):
+            callee = None
+            if isinstance(node.func, ast.Name):
+                callee = node.func.id
+            if callee and callee in funcs:
+                target = self.current  # 在函數內 → 注入該函數；在頂層 → 注入 callee 自己
+                for arg in node.args:
+                    if isinstance(arg, ast.Name) and arg.id in top_var_funcs:
+                        inject_to = target if target else callee
+                        for dep in top_var_funcs[arg.id]:
+                            if dep != inject_to and dep not in func_vars.get(inject_to, []):
+                                func_vars.setdefault(inject_to, []).append(dep)
+            self.generic_visit(node)
+
+    TopCallInjector().visit(tree)
+
+    # var_edges 保留給外部使用（目前圖已改用 func_vars 推導）
+    var_edges: set[tuple[str, str]] = set()
+    for func, vars_used in func_vars.items():
+        for var in vars_used:
+            if var in funcs and var != func:
+                var_edges.add((func, var))
+
+    return funcs, set(), var_edges, func_vars
+
 
 def make_graph(filepath: str, out_dir: str):
     name = os.path.splitext(os.path.basename(filepath))[0]
     print(f"\n[{name}]")
 
-    funcs, call_edges, var_edges = analyze(filepath)
-    all_edges = call_edges | var_edges
+    funcs, call_edges, var_edges, func_vars = analyze(filepath)
+
+    # 從 func_vars 推導邊，方向是「前置條件 → 依賴它的函數」
+    # 1. var 名稱直接是函數名：A 用到 B → B 是 A 的前置條件 → 邊 B→A
+    # 2. var 是某函數產生的（透過 var_edges）：A 用到 var，var 由 B 產生 → 邊 B→A
+    derived_edges: set[tuple[str, str]] = set()
+
+    # var_source: 把 var_edges 反查 dependency→producer
+    var_source_map: dict[str, str] = {}
+    for dependent, producer in var_edges:
+        # var_edges = (func_that_uses_var, func_that_produces_var)
+        # 我們需要知道哪個 var 對應哪個 producer
+        # 直接用 var_edges 建邊：producer → dependent
+        derived_edges.add((producer, dependent))
+
+    for func, vars_used in func_vars.items():
+        for var in vars_used:
+            if var in funcs and var != func:
+                # var 名稱就是函數名，直接建邊 var→func
+                derived_edges.add((var, func))
+
+    all_edges = derived_edges
 
     if not funcs:
         print("  No functions found, skipping.")
@@ -208,15 +356,10 @@ def make_graph(filepath: str, out_dir: str):
     for f in sorted(show_nodes):
         dot_lines.append(f'  {f} [label="{f}"];')
 
-    # 直接呼叫：藍色實線
-    for src, dst in sorted(call_edges):
+    # 邊從 derived_edges 建立：src 是前置條件，dst 是依賴它的函數
+    for src, dst in sorted(derived_edges):
         if src in funcs and dst in funcs:
             dot_lines.append(f'  {src} -> {dst} [color="#00cfff", penwidth=2.0];')
-
-    # 全域變數依賴：橘色虛線
-    for src, dst in sorted(var_edges):
-        if src in funcs and dst in funcs:
-            dot_lines.append(f'  {src} -> {dst} [color="#ffaa00", style=dashed, penwidth=2.0, label="   globals   ", fontcolor="white", fontsize=11, labeldistance=5.0, labelangle=45];')
 
     dot_lines.append("}")
 
@@ -235,8 +378,7 @@ def make_graph(filepath: str, out_dir: str):
         for f in sorted(show_nodes)
     ])
     vis_edges = json.dumps(
-        [{"from": s, "to": d, "color": {"color": "#00cfff"}, "arrows": "to"} for s, d in sorted(call_edges) if s in funcs and d in funcs] +
-        [{"from": s, "to": d, "color": {"color": "#ffaa00"}, "arrows": "to", "dashes": True, "label": "globals"} for s, d in sorted(var_edges) if s in funcs and d in funcs]
+        [{"from": s, "to": d, "color": {"color": "#00cfff"}, "arrows": "to"} for s, d in sorted(derived_edges) if s in funcs and d in funcs]
     )
 
     html = f"""<!DOCTYPE html>
@@ -305,8 +447,45 @@ if not py_files:
     exit(0)
 
 print(f"Found {len(py_files)} file(s)")
+
+# 收集所有依賴關係
+all_deps = {}
 for fp in py_files:
+    name = os.path.splitext(os.path.basename(fp))[0]
+    funcs, call_edges, var_edges, func_vars = analyze(fp)
+    all_deps[name] = {
+        "functions": sorted(funcs),
+        "variables_used": {k: v for k, v in func_vars.items()},
+        "call_dependencies": sorted([{"from": s, "to": d} for s, d in call_edges], key=lambda x: x["from"]),
+        "variable_dependencies": sorted([{"from": s, "to": d} for s, d in var_edges], key=lambda x: x["from"]),
+    }
     make_graph(fp, OUTPUT_DIR)
+
+# 輸出 dependencies.json
+deps_path = os.path.join(OUTPUT_DIR, "dependencies.json")
+with open(deps_path, "w", encoding="utf-8") as f:
+    json.dump(all_deps, f, indent=2, ensure_ascii=False)
+shutil.copy2(deps_path, os.path.join(LATEST_DIR, "dependencies.json"))
+print(f"JSON → {deps_path}")
+
+# ── 產生 CSV（每個檔案各一份）────────────────────────────────────
+for file_name, info in all_deps.items():
+    rows = []
+    for func, vars_used in info.get("variables_used", {}).items():
+        rows.append([func] + vars_used)
+
+    max_cols = max((len(r) for r in rows), default=1)
+    header = ["function_name"] + [f"var_{i+1}" for i in range(max_cols - 1)]
+
+    csv_path = os.path.join(OUTPUT_DIR, f"{file_name}.csv")
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        for row in rows:
+            writer.writerow(row + [""] * (max_cols - len(row)))
+
+    shutil.copy2(csv_path, os.path.join(LATEST_DIR, f"{file_name}.csv"))
+    print(f"CSV  → {csv_path}")
 
 
 # ── 更新 README.md ────────────────────────────────────────────────
@@ -323,11 +502,12 @@ for png in png_files:
     name = os.path.splitext(png)[0]
     sections.append(f"## {name}\n![{name}]({LATEST_DIR}/{png})")
 
+separator = "\n\n---\n\n"
 readme = f"""# {repo_name}
 
 ---
 
-{"\n\n---\n\n".join(sections)}
+{separator.join(sections)}
 """
 
 with open("README.md", "w", encoding="utf-8") as f:
