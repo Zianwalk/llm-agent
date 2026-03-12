@@ -24,10 +24,10 @@ jobs:
 
       - name: Keep only latest output
         run: |
-          LATEST=$(ls callgraphs/ | grep -v latest | sort | tail -1)
+          LATEST=$(ls callgraphs/ | sort | tail -1)
           for dir in callgraphs/*/; do
             dirname=$(basename "$dir")
-            if [ "$dirname" != "latest" ] && [ "$dirname" != "$LATEST" ]; then
+            if [ "$dirname" != "$LATEST" ]; then
               rm -rf "$dir"
             fi
           done
