@@ -43,19 +43,19 @@
     "variable_dependencies": [
       {
         "from": "agent",
-        "to": "calculator"
-      },
-      {
-        "from": "agent",
-        "to": "build_tool_prompt"
-      },
-      {
-        "from": "agent",
         "to": "llm"
       },
       {
         "from": "agent",
         "to": "parse_tool_call"
+      },
+      {
+        "from": "agent",
+        "to": "calculator"
+      },
+      {
+        "from": "agent",
+        "to": "build_tool_prompt"
       },
       {
         "from": "build_tool_prompt",
