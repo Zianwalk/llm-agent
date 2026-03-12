@@ -4,27 +4,14 @@ import re
 import ast
 import csv
 import json
-import shutil
 import builtins
 from collections import defaultdict
-from datetime import datetime
 
 BUILTINS = set(dir(builtins))
 
-# ── 取得 branch 名稱 ──────────────────────────────────────────────
-try:
-    branch = subprocess.check_output(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"]
-    ).decode().strip()
-except Exception:
-    branch = "main"
-
-date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-OUTPUT_DIR = f"callgraphs/{date}_{branch}"
+OUTPUT_DIR = "callgraphs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-LATEST_DIR = "callgraphs/latest"
-os.makedirs(LATEST_DIR, exist_ok=True)
 
 EXCLUDE_DIRS = {".git", "callgraphs", "__pycache__", ".venv", "venv", "scripts"}
 
@@ -334,7 +321,6 @@ def make_graph(filepath: str, out_dir: str):
     # ── 產生 dot ─────────────────────────────────────────────────
     out_dot  = os.path.join(out_dir, f"{name}.dot")
     out_png  = os.path.join(out_dir, f"{name}.png")
-    out_html = os.path.join(out_dir, f"{name}.html")
 
     dot_lines = [
         f'digraph "{name}" {{',
@@ -372,66 +358,7 @@ def make_graph(filepath: str, out_dir: str):
     else:
         print(f"  PNG  → {out_png}")
 
-    # ── HTML ─────────────────────────────────────────────────────
-    vis_nodes = json.dumps([
-        {"id": f, "label": f, "level": level[f]}
-        for f in sorted(show_nodes)
-    ])
-    vis_edges = json.dumps(
-        [{"from": s, "to": d, "color": {"color": "#00cfff"}, "arrows": "to"} for s, d in sorted(derived_edges) if s in funcs and d in funcs]
-    )
 
-    html = f"""<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-<meta charset="UTF-8">
-<title>{name} – {date}</title>
-<style>
-  *{{margin:0;padding:0;box-sizing:border-box}}
-  body{{background:#0d1117;font-family:'Courier New',monospace;color:#ccccdd}}
-  #header{{padding:14px 22px;border-bottom:1px solid #444466;display:flex;align-items:center;justify-content:space-between}}
-  #header h1{{font-size:14px;color:#00cfff;letter-spacing:.06em}}
-  #header span{{font-size:12px;color:#8b949e}}
-  #legend{{display:flex;gap:20px;font-size:11px}}
-  .dot{{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px}}
-  #graph{{width:100%;height:calc(100vh - 49px)}}
-</style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/dist/vis-network.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/dist/dist/vis-network.min.css">
-</head>
-<body>
-<div id="header">
-  <h1>&#128336; {name}</h1>
-  <div id="legend">
-    <span><span class="dot" style="background:#00cfff"></span>直接呼叫</span>
-    <span><span class="dot" style="background:#ffaa00"></span>全域變數依賴</span>
-  </div>
-  <span>{branch} · {date}</span>
-</div>
-<div id="graph"></div>
-<script>
-const nodes = new vis.DataSet({vis_nodes});
-const edges = new vis.DataSet({vis_edges});
-const options = {{
-  layout:{{hierarchical:{{enabled:true,direction:"UD",sortMethod:"directed",levelSeparation:120,nodeSpacing:160,treeSpacing:200}}}},
-  physics:{{enabled:false}},
-  nodes:{{shape:"box",borderRadius:6,color:{{background:"#ffffff",border:"#888888",highlight:{{background:"#e8f4ff",border:"#00cfff"}}}},font:{{color:"#111111",face:"Courier New",size:13}},shadow:{{enabled:true,color:"rgba(0,0,0,.4)",x:2,y:2,size:6}}}},
-  edges:{{smooth:{{type:"cubicBezier",forceDirection:"vertical"}},arrows:{{to:{{enabled:true,scaleFactor:0.7}}}},font:{{color:"#8b949e",size:10}}}},
-  interaction:{{hover:true,zoomView:true}}
-}};
-new vis.Network(document.getElementById("graph"),{{nodes,edges}},options);
-</script>
-</body>
-</html>"""
-
-    with open(out_html, "w", encoding="utf-8") as f:
-        f.write(html)
-    print(f"  HTML → {out_html}")
-
-    # 更新 latest/
-    for src_path, fname in [(out_png, f"{name}.png"), (out_html, f"{name}.html")]:
-        if os.path.exists(src_path):
-            shutil.copy2(src_path, os.path.join(LATEST_DIR, fname))
 
 
 # ── 找所有 .py 檔，各自分析 ──────────────────────────────────────
@@ -465,7 +392,6 @@ for fp in py_files:
 deps_path = os.path.join(OUTPUT_DIR, "dependencies.json")
 with open(deps_path, "w", encoding="utf-8") as f:
     json.dump(all_deps, f, indent=2, ensure_ascii=False)
-shutil.copy2(deps_path, os.path.join(LATEST_DIR, "dependencies.json"))
 print(f"JSON → {deps_path}")
 
 # ── 產生 CSV（每個檔案各一份）────────────────────────────────────
@@ -484,23 +410,22 @@ for file_name, info in all_deps.items():
         for row in rows:
             writer.writerow(row + [""] * (max_cols - len(row)))
 
-    shutil.copy2(csv_path, os.path.join(LATEST_DIR, f"{file_name}.csv"))
     print(f"CSV  → {csv_path}")
 
 
 # ── 更新 README.md ────────────────────────────────────────────────
 repo_name = os.path.basename(os.path.abspath("."))
 
-# 掃描 latest/ 裡的 png，依檔名排序
+# 掃描 OUTPUT_DIR 裡的 png，依檔名排序
 png_files = sorted([
-    f for f in os.listdir(LATEST_DIR)
+    f for f in os.listdir(OUTPUT_DIR)
     if f.endswith(".png")
 ])
 
 sections = []
 for png in png_files:
     name = os.path.splitext(png)[0]
-    sections.append(f"## {name}\n![{name}]({LATEST_DIR}/{png})")
+    sections.append(f"## {name}\n![{name}]({OUTPUT_DIR}/{png})")
 
 separator = "\n\n---\n\n"
 readme = f"""# {repo_name}

@@ -22,15 +22,6 @@ jobs:
       - name: Generate callgraph
         run: python scripts/generate_callgraph.py
 
-      - name: Keep only latest output
-        run: |
-          LATEST=$(ls callgraphs/ | sort | tail -1)
-          for dir in callgraphs/*/; do
-            dirname=$(basename "$dir")
-            if [ "$dirname" != "$LATEST" ]; then
-              rm -rf "$dir"
-            fi
-          done
 
       - name: Commit and push
         run: |
