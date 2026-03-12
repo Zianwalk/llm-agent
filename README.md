@@ -3,9 +3,9 @@
 ---
 
 ## agent
-![agent](callgraphs/latest/agent.png)
+![agent](callgraphs/agent.png)
 
 ---
 
 ## llm_call
-![llm_call](callgraphs/latest/llm_call.png)
+![llm_call](callgraphs/llm_call.png)
