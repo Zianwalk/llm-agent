@@ -1,4 +1,120 @@
 {
+  "agent-plus": {
+    "functions": [
+      "_safe_eval",
+      "agent",
+      "build_tool_prompt",
+      "calculator",
+      "code_loop",
+      "execute_code",
+      "extract_code",
+      "llm",
+      "load_model",
+      "parse_tool_call",
+      "run_code_iteration"
+    ],
+    "variables_used": {
+      "load_model": [
+        "MODEL_NAME"
+      ],
+      "llm": [
+        "load_model",
+        "k",
+        "v",
+        "MAX_NEW_TOKENS",
+        "DO_SAMPLE",
+        "build_tool_prompt"
+      ],
+      "_safe_eval": [],
+      "calculator": [
+        "e"
+      ],
+      "extract_code": [],
+      "execute_code": [
+        "e"
+      ],
+      "run_code_iteration": [
+        "llm",
+        "extract_code",
+        "MAX_CODE_RETRY",
+        "execute_code"
+      ],
+      "code_loop": [
+        "MAX_CODE_RETRY",
+        "run_code_iteration",
+        "attempt",
+        "extract_code"
+      ],
+      "build_tool_prompt": [
+        "name",
+        "TOOLS",
+        "calculator"
+      ],
+      "parse_tool_call": [
+        "line",
+        "TOOLS",
+        "calculator",
+        "name"
+      ],
+      "agent": [
+        "llm",
+        "parse_tool_call",
+        "TOOLS",
+        "calculator"
+      ]
+    },
+    "call_dependencies": [],
+    "variable_dependencies": [
+      {
+        "from": "agent",
+        "to": "llm"
+      },
+      {
+        "from": "agent",
+        "to": "parse_tool_call"
+      },
+      {
+        "from": "agent",
+        "to": "calculator"
+      },
+      {
+        "from": "build_tool_prompt",
+        "to": "calculator"
+      },
+      {
+        "from": "code_loop",
+        "to": "run_code_iteration"
+      },
+      {
+        "from": "code_loop",
+        "to": "extract_code"
+      },
+      {
+        "from": "llm",
+        "to": "build_tool_prompt"
+      },
+      {
+        "from": "llm",
+        "to": "load_model"
+      },
+      {
+        "from": "parse_tool_call",
+        "to": "calculator"
+      },
+      {
+        "from": "run_code_iteration",
+        "to": "llm"
+      },
+      {
+        "from": "run_code_iteration",
+        "to": "extract_code"
+      },
+      {
+        "from": "run_code_iteration",
+        "to": "execute_code"
+      }
+    ]
+  },
   "agent": {
     "functions": [
       "agent",
@@ -43,7 +159,7 @@
     "variable_dependencies": [
       {
         "from": "agent",
-        "to": "calculator"
+        "to": "build_tool_prompt"
       },
       {
         "from": "agent",
@@ -51,11 +167,11 @@
       },
       {
         "from": "agent",
-        "to": "build_tool_prompt"
+        "to": "parse_tool_call"
       },
       {
         "from": "agent",
-        "to": "parse_tool_call"
+        "to": "calculator"
       },
       {
         "from": "build_tool_prompt",

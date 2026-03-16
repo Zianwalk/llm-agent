@@ -1,0 +1,34 @@
+digraph "agent-plus" {
+  graph [rankdir=TB, bgcolor="#0d1117", pad=0.8, ranksep=1.2, nodesep=0.8, fontname="Courier New"];
+  node  [shape=box, style="filled,rounded", fillcolor="white", fontcolor="#111111",
+         fontname="Courier New", fontsize=12, color="#888888", width=1.6, penwidth=1.5];
+  edge  [arrowsize=0.8, penwidth=2.0];
+  { rank=same; _safe_eval; calculator; execute_code; extract_code; load_model }
+  { rank=same; build_tool_prompt; parse_tool_call }
+  { rank=same; llm }
+  { rank=same; agent; run_code_iteration }
+  { rank=same; code_loop }
+  _safe_eval [label="_safe_eval"];
+  agent [label="agent"];
+  build_tool_prompt [label="build_tool_prompt"];
+  calculator [label="calculator"];
+  code_loop [label="code_loop"];
+  execute_code [label="execute_code"];
+  extract_code [label="extract_code"];
+  llm [label="llm"];
+  load_model [label="load_model"];
+  parse_tool_call [label="parse_tool_call"];
+  run_code_iteration [label="run_code_iteration"];
+  build_tool_prompt -> llm [color="#00cfff", penwidth=2.0];
+  calculator -> agent [color="#00cfff", penwidth=2.0];
+  calculator -> build_tool_prompt [color="#00cfff", penwidth=2.0];
+  calculator -> parse_tool_call [color="#00cfff", penwidth=2.0];
+  execute_code -> run_code_iteration [color="#00cfff", penwidth=2.0];
+  extract_code -> code_loop [color="#00cfff", penwidth=2.0];
+  extract_code -> run_code_iteration [color="#00cfff", penwidth=2.0];
+  llm -> agent [color="#00cfff", penwidth=2.0];
+  llm -> run_code_iteration [color="#00cfff", penwidth=2.0];
+  load_model -> llm [color="#00cfff", penwidth=2.0];
+  parse_tool_call -> agent [color="#00cfff", penwidth=2.0];
+  run_code_iteration -> code_loop [color="#00cfff", penwidth=2.0];
+}

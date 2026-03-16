@@ -2,6 +2,11 @@
 
 ---
 
+## agent-plus
+![agent-plus](callgraphs/agent-plus.png)
+
+---
+
 ## agent
 ![agent](callgraphs/agent.png)
 
