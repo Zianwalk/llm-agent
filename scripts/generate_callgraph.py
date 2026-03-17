@@ -140,6 +140,19 @@ def analyze(filepath: str):
                         self.comp_vars.add(e.id)
             self.generic_visit(node)
 
+        def visit_Call(self, node):
+            """直接函數呼叫也算依賴：在函數 A 內呼叫 B() → A 依賴 B"""
+            if self.current:
+                callee = None
+                if isinstance(node.func, ast.Name):
+                    callee = node.func.id
+                elif isinstance(node.func, ast.Attribute):
+                    callee = node.func.attr
+                if (callee and callee in funcs and callee != self.current
+                        and callee not in self.func_vars[self.current]):
+                    self.func_vars[self.current].append(callee)
+            self.generic_visit(node)
+
         def visit_Name(self, node):
             if not self.current or not isinstance(node.ctx, ast.Load):
                 self.generic_visit(node)
@@ -164,7 +177,7 @@ def analyze(filepath: str):
                     or name in self.comp_vars
                     or name in BUILTINS
                     or name in imports
-                    or name.startswith("_")
+                    or (name.startswith("__") and name.endswith("__"))
                     or name == self.current):
                 self.generic_visit(node)
                 return
