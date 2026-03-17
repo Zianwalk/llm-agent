@@ -3,7 +3,8 @@ digraph "agent-plus" {
   node  [shape=box, style="filled,rounded", fillcolor="white", fontcolor="#111111",
          fontname="Courier New", fontsize=12, color="#888888", width=1.6, penwidth=1.5];
   edge  [arrowsize=0.8, penwidth=2.0];
-  { rank=same; _safe_eval; calculator; execute_code; extract_code; load_model }
+  { rank=same; _safe_eval; execute_code; extract_code; load_model }
+  { rank=same; calculator }
   { rank=same; build_tool_prompt; parse_tool_call }
   { rank=same; llm }
   { rank=same; agent; run_code_iteration }
@@ -19,6 +20,7 @@ digraph "agent-plus" {
   load_model [label="load_model"];
   parse_tool_call [label="parse_tool_call"];
   run_code_iteration [label="run_code_iteration"];
+  _safe_eval -> calculator [color="#00cfff", penwidth=2.0];
   build_tool_prompt -> llm [color="#00cfff", penwidth=2.0];
   calculator -> agent [color="#00cfff", penwidth=2.0];
   calculator -> build_tool_prompt [color="#00cfff", penwidth=2.0];

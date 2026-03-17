@@ -25,8 +25,11 @@
         "DO_SAMPLE",
         "build_tool_prompt"
       ],
-      "_safe_eval": [],
+      "_safe_eval": [
+        "_OPERATORS"
+      ],
       "calculator": [
+        "_safe_eval",
         "e"
       ],
       "extract_code": [],
@@ -67,10 +70,6 @@
     "variable_dependencies": [
       {
         "from": "agent",
-        "to": "llm"
-      },
-      {
-        "from": "agent",
         "to": "parse_tool_call"
       },
       {
@@ -78,8 +77,16 @@
         "to": "calculator"
       },
       {
+        "from": "agent",
+        "to": "llm"
+      },
+      {
         "from": "build_tool_prompt",
         "to": "calculator"
+      },
+      {
+        "from": "calculator",
+        "to": "_safe_eval"
       },
       {
         "from": "code_loop",
@@ -91,15 +98,19 @@
       },
       {
         "from": "llm",
-        "to": "build_tool_prompt"
+        "to": "load_model"
       },
       {
         "from": "llm",
-        "to": "load_model"
+        "to": "build_tool_prompt"
       },
       {
         "from": "parse_tool_call",
         "to": "calculator"
+      },
+      {
+        "from": "run_code_iteration",
+        "to": "execute_code"
       },
       {
         "from": "run_code_iteration",
@@ -108,10 +119,6 @@
       {
         "from": "run_code_iteration",
         "to": "extract_code"
-      },
-      {
-        "from": "run_code_iteration",
-        "to": "execute_code"
       }
     ]
   },
@@ -159,6 +166,10 @@
     "variable_dependencies": [
       {
         "from": "agent",
+        "to": "calculator"
+      },
+      {
+        "from": "agent",
         "to": "build_tool_prompt"
       },
       {
@@ -168,10 +179,6 @@
       {
         "from": "agent",
         "to": "parse_tool_call"
-      },
-      {
-        "from": "agent",
-        "to": "calculator"
       },
       {
         "from": "build_tool_prompt",

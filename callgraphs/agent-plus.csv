@@ -1,8 +1,8 @@
 function_name,var_1,var_2,var_3,var_4,var_5,var_6
 load_model,MODEL_NAME,,,,,
 llm,load_model,k,v,MAX_NEW_TOKENS,DO_SAMPLE,build_tool_prompt
-_safe_eval,,,,,,
-calculator,e,,,,,
+_safe_eval,_OPERATORS,,,,,
+calculator,_safe_eval,e,,,,
 extract_code,,,,,,
 execute_code,e,,,,,
 run_code_iteration,llm,extract_code,MAX_CODE_RETRY,execute_code,,
